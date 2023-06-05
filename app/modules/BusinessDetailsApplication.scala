@@ -10,14 +10,9 @@ import akka.stream.scaladsl.{Flow, Sink, Source}
 import akka.stream.{ActorAttributes, Materializer, OverflowStrategy}
 import config.AppConfig
 import kafka.KafkaConsumer
-import models.{FinalBusinessDetails, KafkaMessage}
-import modules.flows.AppFlows.{decider, insertBusinessRecords, processKafkaMessage, transformBusinessDetails}
+import models.KafkaMessage
+import modules.flows.AppFlows.{createJson, decider, insertBusinessRecords, processKafkaMessage, transformBusinessDetails, writeJson}
 import play.api.Logger
-import play.api.libs.json.Json
-
-import java.io.PrintWriter
-import java.nio.charset.StandardCharsets
-import java.time.LocalDateTime
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{ExecutionContext, Future}
@@ -37,16 +32,9 @@ class BusinessDetailsApplication @Inject() (implicit ac : ActorSystem,
 
   logger.info("Consuming business events from kafka")
 
-  def createJson(message : KafkaMessage) = {
-    val jsonMessage = Json.toJson(message.businessDetails.asInstanceOf[FinalBusinessDetails])
-    message.copy(kafkaMessage = jsonMessage.toString())
-  }
-
-  def writetoJsonFile(batch : Seq[KafkaMessage]) = {
-    val writer = new PrintWriter(s"C:\\business_play\\business_insights\\conf\\output-${LocalDateTime.now()
-      .toString.substring(0,19).replace("-","").replace(":","")}.json",StandardCharsets.UTF_8)
-    batch.foreach(msg => writer.println(msg.kafkaMessage))
-    writer.close()
+  def writeJsonAndOffsetCommit(batch: Seq[KafkaMessage]) = {
+    writeJson(batch)
+    //Commit kafka offsets
     Source(batch.map(_.kafkaOffset))
       .runWith(Committer.sink(CommitterSettings(ac)))
   }
@@ -58,8 +46,7 @@ class BusinessDetailsApplication @Inject() (implicit ac : ActorSystem,
     .mapAsync(parallelism)(msg => insertBusinessRecords(msg,businessRepository))
     .map(createJson)
     .groupedWithin(10000, 10.seconds)
-    .map(msg => writetoJsonFile(msg))
-    //.toMat(Committer.sink(CommitterSettings(ac)))(DrainingControl.apply)
+    .map(writeJsonAndOffsetCommit)
     .toMat(Sink.ignore)(DrainingControl.apply)
     .withAttributes(ActorAttributes.supervisionStrategy(decider))
     .run()

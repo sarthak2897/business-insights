@@ -3,16 +3,19 @@ package modules.flows
 import MongoDao.BusinessRepository
 import akka.kafka.ConsumerMessage
 import akka.stream.Supervision
-import config.AppConfig
+import config.{AppConfig, AppConstants}
 import exception.InvalidKafkaMessageException
 import models.{FinalBusinessDetails, InitialBusinessDetails, KafkaMessage}
 import play.api.Logger
 import play.api.libs.json.{JsError, JsPath, JsResult, JsSuccess, JsValue, Json}
 import reactivemongo.core.errors.DatabaseException
 
+import java.io.PrintWriter
+import java.nio.charset.StandardCharsets
+import java.time.LocalDateTime
 import scala.concurrent.{ExecutionContext, Future}
 import scala.io.Source
-import scala.util.Try
+import scala.util.{Try, Using}
 
 object AppFlows {
 
@@ -36,10 +39,10 @@ object AppFlows {
   }
 
   def fetchStates() = {
-    Source.fromFile("conf\\states.csv").getLines().drop(1)
-      .map(line => line.split(",").map(_.trim)
+    Using(Source.fromFile(AppConstants.statesCsvPath)) { l =>
+      l.getLines().drop(1).map(line => line.split(",").map(_.trim)
         .map(_.replace("\"","")))
-      .map(x => (x(1),x(0))).toMap
+      .map(x => (x(1),x(0))).toMap }.get
   }
 
   def createFinalBusinessDetails(ibd : InitialBusinessDetails,appConfig : AppConfig) = {
@@ -87,6 +90,24 @@ object AppFlows {
     else
       "Rest of US"
   }
+
+  def createJson(message: KafkaMessage) = {
+    val jsonMessage = Json.toJson(message.businessDetails.asInstanceOf[FinalBusinessDetails])
+    message.copy(kafkaMessage = jsonMessage.toString())
+  }
+
+  def generateJsonFileName() = {
+    s"${AppConstants.jsonPathPrefix}-${LocalDateTime.now().toString.substring(0, 19)
+        .replace("-", "")
+        .replace(":", "")}.json"
+  }
+
+  def writeJson(batch : Seq[KafkaMessage]) = {
+    val writer = new PrintWriter(generateJsonFileName(), StandardCharsets.UTF_8)
+    batch.foreach(msg => writer.println(msg.kafkaMessage))
+    writer.close()
+  }
+
 
   val decider: Supervision.Decider = {
     case e: DatabaseException if e.code.get == 11000 =>

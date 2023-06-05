@@ -1,0 +1,46 @@
+CREATE OR REPLACE DATABASE BUSINESSES;
+
+USE DATABASE BUSINESSES;
+
+CREATE OR REPLACE FILE FORMAT json_format type=JSON
+--COMPRESSION=GZIP
+
+CREATE OR REPLACE STAGE JSON_RAW_STAGE
+file_format = json_format
+
+//Run this from snowsql
+PUT file://C:/business_play/business_insights/conf/output-*.json @JSON_RAW_STAGE AUTO_COMPRESS=FALSE;
+
+LIST @JSON_RAW_STAGE;
+
+CREATE OR REPLACE TABLE JSON_RAW
+(Raw Variant)
+
+COPY INTO JSON_RAW
+FROM @json_raw_stage
+
+SELECT * FROM JSON_RAW
+
+CREATE OR REPLACE TABLE BUSINESSES AS
+SELECT
+RAW:businessId::STRING AS business_id,
+RAW:name::STRING AS name,
+RAW:address::STRING AS address,
+RAW:city::STRING AS city,
+RAW:state::STRING AS state,
+RAW:postalCode::STRING AS postal_code,
+RAW:latitude::DOUBLE AS latitude,
+RAW:longitude::DOUBLE AS longitude,
+RAW:region::STRING AS region,
+RAW:stars::DOUBLE AS stars,
+RAW:reviewCount::INT AS review_count,
+RAW:isOpen::BOOLEAN AS is_open,
+RAW:categoryType::STRING AS category_type,
+RAW:insertTimestamp::TIMESTAMP AS load_timestamp
+FROM JSON_RAW
+
+
+SELECT SUM(total_count) from (SELECT region,count(*) as total_count FROM BUSINESSES
+group by region
+order by total_count desc);
+
