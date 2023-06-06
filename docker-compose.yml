@@ -1,11 +1,19 @@
 version: '3.3'
 services:
+  mongodb:
+    image: mongo:4.2
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+
   zookeeper:
     image: confluentinc/cp-zookeeper:7.3.2
     container_name: zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
 
   broker:
     image: confluentinc/cp-kafka:7.3.2
