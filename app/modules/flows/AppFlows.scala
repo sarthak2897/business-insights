@@ -1,9 +1,10 @@
 package modules.flows
 
 import MongoDao.BusinessRepository
+import akka.Done
 import akka.kafka.ConsumerMessage
 import akka.stream.Supervision
-import config.{AppConfig, AppConstants}
+import config.{AppConfig, AppConstants, BlobStorageConfig}
 import exception.InvalidKafkaMessageException
 import models.{FinalBusinessDetails, InitialBusinessDetails, KafkaMessage}
 import play.api.Logger
@@ -102,11 +103,22 @@ object AppFlows {
         .replace(":", "")}.json"
   }
 
-  def writeJson(batch : Seq[KafkaMessage]) = {
+  def writeJsonToLocal(batch : Seq[KafkaMessage], fileName : String) = {
     val writer = new PrintWriter(generateJsonFileName(), StandardCharsets.UTF_8)
     batch.foreach(msg => writer.println(msg.kafkaMessage))
     writer.close()
   }
+
+  def writeJsonToAzureBlobStorage(batch : Seq[KafkaMessage], blobStorageConfig: BlobStorageConfig)
+                                 (implicit ec : ExecutionContext) = {
+    val fileName = generateJsonFileName()
+    val blob = blobStorageConfig.getAzureBlobContainer().getBlockBlobReference(fileName)
+    for {
+      _ <- Future(writeJsonToLocal(batch,fileName))
+      _ <- Future(blob.uploadFromFile(fileName))
+    } yield Done
+  }
+
 
 
   val decider: Supervision.Decider = {

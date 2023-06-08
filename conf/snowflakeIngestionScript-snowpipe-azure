@@ -1,0 +1,86 @@
+CREATE OR REPLACE DATABASE SNOWPIPE;
+
+-- create integration object that contains the access information
+CREATE OR REPLACE STORAGE INTEGRATION azure_snowpipe_integration
+  TYPE = EXTERNAL_STAGE
+  STORAGE_PROVIDER = AZURE
+  ENABLED = TRUE
+  AZURE_TENANT_ID =  'b8f35eab-46ed-4afa-a257-93c61b3e5b20'
+  STORAGE_ALLOWED_LOCATIONS = ( 'azure://businessstorageaccount28.blob.core.windows.net/businessdata');
+
+  DESC STORAGE integration azure_snowpipe_integration;
+
+  CREATE OR REPLACE FILE FORMAT json_format_azure type=JSON
+
+  -- create stage object
+create or replace stage stage_azure
+    STORAGE_INTEGRATION = azure_snowpipe_integration
+    URL = 'azure://businessstorageaccount28.blob.core.windows.net/businessdata'
+    FILE_FORMAT = json_format_azure;
+
+LIST @stage_azure;
+
+-- create notification integration with azure queue
+CREATE OR REPLACE NOTIFICATION INTEGRATION snowpipe_event
+  ENABLED = true
+  TYPE = QUEUE
+  NOTIFICATION_PROVIDER = AZURE_STORAGE_QUEUE
+  AZURE_STORAGE_QUEUE_PRIMARY_URI = 'https://businessstorageaccount28.queue.core.windows.net/businesssnowpipequeue'
+  AZURE_TENANT_ID = 'b8f35eab-46ed-4afa-a257-93c61b3e5b20';
+
+
+  -- Register Integration
+  DESC notification integration snowpipe_event;
+
+
+-- create the destination table
+CREATE OR REPLACE TABLE BUSINESSES(
+business_id STRING,
+name STRING,
+address STRING,
+city STRING,
+state STRING,
+postal_code STRING,
+latitude DOUBLE,
+longitude DOUBLE,
+region STRING,
+stars DOUBLE,
+review_count INT,
+is_open BOOLEAN,
+category_type STRING,
+load_timestamp TIMESTAMP)
+
+  -- create pipe
+  create or replace pipe azure_pipe
+  auto_ingest = true
+  integration = 'SNOWPIPE_EVENT'
+  as
+  copy into BUSINESSES
+  from (
+  SELECT
+    $1:businessId::STRING,
+    $1:name::STRING,
+    $1:address::STRING,
+    $1:city::STRING,
+    $1:state::STRING,
+    $1:postalCode::STRING,
+    $1:latitude::DOUBLE,
+    $1:longitude::DOUBLE,
+    $1:region::STRING,
+    $1:stars::DOUBLE,
+    $1:reviewCount::INT,
+    $1:isOpen::BOOLEAN,
+    $1:categoryType::STRING,
+    $1:insertTimestamp::TIMESTAMP
+    FROM
+    @stage_azure);
+
+-- Query to check counts
+
+SELECT SUM(total_count) from (
+SELECT region,count(*) as total_count FROM BUSINESSES
+group by region
+order by total_count desc
+);
+
+select * from BUSINESSES;

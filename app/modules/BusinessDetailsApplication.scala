@@ -8,11 +8,12 @@ import akka.kafka.scaladsl.Committer
 import akka.kafka.scaladsl.Consumer.DrainingControl
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import akka.stream.{ActorAttributes, Materializer, OverflowStrategy}
-import config.AppConfig
+import config.{AppConfig, BlobStorageConfig}
 import kafka.KafkaConsumer
 import models.KafkaMessage
-import modules.flows.AppFlows.{createJson, decider, insertBusinessRecords, processKafkaMessage, transformBusinessDetails, writeJson}
+import modules.flows.AppFlows.{createJson, decider, insertBusinessRecords, processKafkaMessage, transformBusinessDetails, writeJsonToLocal, writeJsonToAzureBlobStorage}
 import play.api.Logger
+
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{ExecutionContext, Future}
@@ -23,7 +24,8 @@ class BusinessDetailsApplication @Inject() (implicit ac : ActorSystem,
                                             implicit val mat : Materializer,
                                             val kafkaConsumer: KafkaConsumer,
                                             val businessRepository : BusinessRepository,
-                                            val appConfig: AppConfig) {
+                                            val appConfig: AppConfig,
+                                            val blobStorageConfig: BlobStorageConfig) {
 
   // Creating an akka stream to ingest business details data from kafka using alpakka
 
@@ -32,8 +34,9 @@ class BusinessDetailsApplication @Inject() (implicit ac : ActorSystem,
 
   logger.info("Consuming business events from kafka")
 
-  def writeJsonAndOffsetCommit(batch: Seq[KafkaMessage]) = {
-    writeJson(batch)
+  def writeJsonAndOffsetCommit(batch: Seq[KafkaMessage], blobStorageConfig: BlobStorageConfig) = {
+
+    writeJsonToAzureBlobStorage(batch, blobStorageConfig)
     //Commit kafka offsets
     Source(batch.map(_.kafkaOffset))
       .runWith(Committer.sink(CommitterSettings(ac)))
@@ -46,7 +49,7 @@ class BusinessDetailsApplication @Inject() (implicit ac : ActorSystem,
     .mapAsync(parallelism)(msg => insertBusinessRecords(msg,businessRepository))
     .map(createJson)
     .groupedWithin(10000, 10.seconds)
-    .map(writeJsonAndOffsetCommit)
+    .map(batch => writeJsonAndOffsetCommit(batch, blobStorageConfig))
     .toMat(Sink.ignore)(DrainingControl.apply)
     .withAttributes(ActorAttributes.supervisionStrategy(decider))
     .run()
