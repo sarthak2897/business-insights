@@ -30,3 +30,15 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+  business-insights-app:
+    image: business-insights-app
+    ports:
+      - "9000:9000"
+    build:
+      context: "./"
+      dockerfile: "Dockerfile"
+    depends_on:
+      - mongodb
+      - zookeeper
+      - broker
