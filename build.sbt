@@ -21,11 +21,16 @@ lazy val mongoDependencies = Seq(
 
 lazy val kafkaDependency = "com.typesafe.akka" %% "akka-stream-kafka" % "2.1.0"
 
-lazy val azureBlobDependency = "com.microsoft.azure" % "azure-storage" % "8.6.6"
+lazy val azureDependencies = Seq(
+  "com.microsoft.azure" % "azure-storage" % "8.6.6",
+  "com.azure" % "azure-security-keyvault-secrets" % "4.5.3",
+  "com.azure" % "azure-identity" % "1.4.0"
+
+
+)
 
 libraryDependencies += kafkaDependency
-libraryDependencies += azureBlobDependency
 libraryDependencies += guice
 libraryDependencies += "org.scalatestplus.play" %% "scalatestplus-play" % "5.0.0" % Test
 
-libraryDependencies ++= (akkaDependencies ++ mongoDependencies)
+libraryDependencies ++= (akkaDependencies ++ mongoDependencies ++ azureDependencies)

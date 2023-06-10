@@ -14,6 +14,9 @@ class AppConfig {
   val kafkaTopic = config.getString("kafka.topic")
   val consumerGroup = config.getString("kafka.consumer-group")
 
+  //Fetch Azure Key Vault configurations
+  val azureKeyVaultUrl = config.getString("azure.key.vault.name")
+
   //Fetch Azure Blob Storage related configurations
   val azureStorageConnectionString = config.getString("azure.storage.connection.string")
   val azureStorageContainerName = config.getString("azure.storage.container.name")
